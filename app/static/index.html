@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MD Parser — 오피스 파일을 마크다운으로</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">MD</span>
+        <div>
+          <h1>MD Parser</h1>
+          <p>오피스 파일을 드래그하면 마크다운으로 변환합니다.</p>
+        </div>
+      </div>
+      <div class="status" id="llm-status" title="LLM 상태">
+        <span class="dot"></span>
+        <span class="label">LLM 상태 확인 중…</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="dropzone-wrap">
+        <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="파일 선택 또는 드래그">
+          <div class="dropzone-inner">
+            <div class="icon">⇪</div>
+            <h2>여기에 파일을 드래그하거나 클릭해 선택하세요</h2>
+            <p class="hint" id="upload-hint">업로드 제한을 확인하는 중…</p>
+            <p class="formats">
+              지원 포맷: PDF · DOCX · XLSX · PPTX · HTML · CSV · JSON · XML · 이미지 · EPUB · ZIP 외
+            </p>
+          </div>
+          <input id="file-input" type="file" multiple hidden />
+        </div>
+      </section>
+
+      <section class="panel queue-panel">
+        <header class="panel-head">
+          <h3>변환 대기 · 결과</h3>
+          <div class="actions">
+            <button id="download-all" class="btn primary" disabled>전체 ZIP 다운로드</button>
+            <button id="refresh" class="btn ghost">새로고침</button>
+          </div>
+        </header>
+        <div id="queue" class="queue"></div>
+        <p id="empty-hint" class="empty-hint">아직 변환된 파일이 없습니다. 파일을 올려보세요.</p>
+      </section>
+
+      <section class="panel preview-panel">
+        <header class="panel-head">
+          <h3 id="preview-title">미리보기</h3>
+          <div class="actions">
+            <button id="copy-md" class="btn ghost" disabled>마크다운 복사</button>
+            <button id="download-current" class="btn primary" disabled>이 파일 다운로드</button>
+          </div>
+        </header>
+        <pre id="preview" class="preview">왼쪽 목록에서 항목을 선택하면 마크다운 미리보기가 표시됩니다.</pre>
+      </section>
+    </main>
+
+    <footer class="footbar">
+      <span id="retention-hint">변환된 파일은 일정 시간 뒤 자동으로 정리됩니다.</span>
+      <span class="muted">markitdown · FastAPI</span>
+    </footer>
+
+    <template id="queue-item-template">
+      <div class="item" data-id="">
+        <div class="item-main">
+          <div class="item-name" title=""></div>
+          <div class="item-meta"></div>
+        </div>
+        <div class="item-actions">
+          <button class="btn ghost btn-preview">미리보기</button>
+          <button class="btn primary btn-download">.md 다운로드</button>
+        </div>
+      </div>
+    </template>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
