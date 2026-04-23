@@ -1,12 +1,13 @@
 @echo off
+chcp 65001 >nul 2>&1
 setlocal enabledelayedexpansion
 
 REM =========================================================
-REM MD Parser - Windows 원클릭 실행 스크립트
-REM   - venv 자동 생성
-REM   - requirements 자동 설치 (해시 변경 시 재설치)
-REM   - .env.example 복사 (.env 없을 때)
-REM   - 브라우저 자동 열기
+REM MD Parser - Windows one-click launcher
+REM   - auto-create venv
+REM   - auto-install requirements (re-run when requirements.txt changes)
+REM   - copy .env.example to .env if missing
+REM   - open browser
 REM =========================================================
 
 cd /d "%~dp0"
@@ -19,17 +20,17 @@ if %errorlevel%==0 (
     if %errorlevel%==0 (
         set "PY=python"
     ) else (
-        echo [ERROR] Python 3.10 이상이 필요합니다. https://www.python.org/downloads/
+        echo [ERROR] Python 3.10+ is required. Download: https://www.python.org/downloads/
         pause
         exit /b 1
     )
 )
 
 if not exist ".venv" (
-    echo [setup] 가상환경 생성 중...
+    echo [setup] Creating virtual environment...
     %PY% -m venv .venv
     if errorlevel 1 (
-        echo [ERROR] venv 생성 실패
+        echo [ERROR] Failed to create venv.
         pause
         exit /b 1
     )
@@ -47,11 +48,11 @@ if exist "%STAMP%" (
 )
 
 if "%NEEDS_INSTALL%"=="1" (
-    echo [setup] 의존성 설치 중... ^(markitdown[all] 포함, 수 분 소요^)
+    echo [setup] Installing dependencies ^(markitdown[all] included, may take several minutes^)...
     python -m pip install --upgrade pip
     python -m pip install -r requirements.txt
     if errorlevel 1 (
-        echo [ERROR] 의존성 설치 실패
+        echo [ERROR] Dependency installation failed.
         pause
         exit /b 1
     )
@@ -59,7 +60,7 @@ if "%NEEDS_INSTALL%"=="1" (
 )
 
 if not exist ".env" (
-    echo [setup] .env 생성 ^(.env.example 복사^) — Fabrix 키를 입력하고 재실행하세요.
+    echo [setup] Created .env from .env.example. Fill in Fabrix keys and re-run for LLM features.
     copy /y ".env.example" ".env" >nul
 )
 
@@ -70,8 +71,8 @@ for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
 
 echo.
 echo ============================================================
-echo  MD Parser 시작: http://localhost:%PORT%
-echo  (종료하려면 이 창에서 Ctrl+C)
+echo  MD Parser running at: http://localhost:%PORT%
+echo  (Press Ctrl+C in this window to stop)
 echo ============================================================
 echo.
 
