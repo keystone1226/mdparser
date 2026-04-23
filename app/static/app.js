@@ -14,6 +14,7 @@ const els = {
   preview: document.getElementById("preview"),
   previewTitle: document.getElementById("preview-title"),
   downloadAll: document.getElementById("download-all"),
+  deleteAll: document.getElementById("delete-all"),
   downloadCurrent: document.getElementById("download-current"),
   copyMd: document.getElementById("copy-md"),
   refresh: document.getElementById("refresh"),
@@ -21,7 +22,31 @@ const els = {
   llmStatus: document.getElementById("llm-status"),
   toast: document.getElementById("toast"),
   tpl: document.getElementById("queue-item-template"),
+  progress: document.getElementById("progress"),
+  progressText: document.getElementById("progress-text"),
+  progressPercent: document.getElementById("progress-percent"),
+  progressBar: document.getElementById("progress-bar"),
 };
+
+function setProgress({ visible, percent, label, indeterminate }) {
+  if (!visible) {
+    els.progress.hidden = true;
+    els.progress.classList.remove("indeterminate");
+    els.progressBar.style.width = "0%";
+    return;
+  }
+  els.progress.hidden = false;
+  if (indeterminate) {
+    els.progress.classList.add("indeterminate");
+    els.progressPercent.textContent = "";
+  } else {
+    els.progress.classList.remove("indeterminate");
+    const pct = Math.max(0, Math.min(100, Math.round(percent || 0)));
+    els.progressBar.style.width = `${pct}%`;
+    els.progressPercent.textContent = `${pct}%`;
+  }
+  if (label) els.progressText.textContent = label;
+}
 
 function showToast(message, variant = "info") {
   els.toast.textContent = message;
@@ -93,6 +118,7 @@ function renderQueue() {
   els.queue.innerHTML = "";
   const okCount = state.items.filter((it) => it.status === "ok").length;
   els.downloadAll.disabled = okCount === 0;
+  els.deleteAll.disabled = state.items.length === 0;
   els.emptyHint.style.display = state.items.length === 0 ? "block" : "none";
 
   for (const item of state.items) {
@@ -144,6 +170,7 @@ function renderQueue() {
 
     const btnPreview = node.querySelector(".btn-preview");
     const btnDownload = node.querySelector(".btn-download");
+    const btnDelete = node.querySelector(".btn-delete");
     if (item.status !== "ok") {
       btnPreview.disabled = true;
       btnDownload.disabled = true;
@@ -155,6 +182,10 @@ function renderQueue() {
     btnDownload.addEventListener("click", (e) => {
       e.stopPropagation();
       window.location.href = `/api/download/${item.id}`;
+    });
+    btnDelete.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteItem(item.id, item.originalName);
     });
     node.addEventListener("click", () => {
       if (item.status === "ok") selectItem(item.id);
@@ -215,6 +246,38 @@ function validateFiles(files) {
   return { ok: true };
 }
 
+function uploadWithProgress(form) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/convert");
+    xhr.responseType = "json";
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable) {
+        const pct = (e.loaded / e.total) * 100;
+        setProgress({ visible: true, percent: pct, label: "업로드 중…" });
+        if (e.loaded >= e.total) {
+          setProgress({ visible: true, indeterminate: true, label: "변환 중…" });
+        }
+      }
+    });
+    xhr.upload.addEventListener("load", () => {
+      setProgress({ visible: true, indeterminate: true, label: "변환 중…" });
+    });
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(xhr.response);
+      } else {
+        const detail = (xhr.response && xhr.response.detail) || xhr.statusText || `HTTP ${xhr.status}`;
+        reject(new Error(detail));
+      }
+    });
+    xhr.addEventListener("error", () => reject(new Error("네트워크 오류")));
+    xhr.addEventListener("abort", () => reject(new Error("업로드가 취소되었습니다.")));
+    xhr.send(form);
+  });
+}
+
 async function uploadFiles(fileList) {
   if (state.uploading) {
     showToast("다른 업로드가 진행 중입니다.", "error");
@@ -227,32 +290,66 @@ async function uploadFiles(fileList) {
     return;
   }
   state.uploading = true;
-  showToast(`${files.length}개 파일 변환 중…`);
+  setProgress({ visible: true, percent: 0, label: `업로드 중… (${files.length}개)` });
 
   const form = new FormData();
   for (const f of files) form.append("files", f, f.name);
 
   try {
-    const res = await fetch("/api/convert", { method: "POST", body: form });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(text || `HTTP ${res.status}`);
-    }
-    const data = await res.json();
-    const okCount = (data.items || []).filter((x) => x.status === "ok").length;
-    const errCount = (data.items || []).length - okCount;
+    const data = await uploadWithProgress(form);
+    const items = (data && data.items) || [];
+    const okCount = items.filter((x) => x.status === "ok").length;
+    const errCount = items.length - okCount;
     if (errCount === 0) {
       showToast(`${okCount}개 변환 완료`, "success");
     } else {
       showToast(`${okCount}개 성공 · ${errCount}개 실패`, errCount === files.length ? "error" : "info");
     }
     await loadHistory();
-    const firstOk = (data.items || []).find((x) => x.status === "ok");
+    const firstOk = items.find((x) => x.status === "ok");
     if (firstOk) selectItem(firstOk.id);
   } catch (err) {
     showToast(`업로드 실패: ${err.message || err}`, "error");
   } finally {
     state.uploading = false;
+    setProgress({ visible: false });
+  }
+}
+
+async function deleteItem(id, name) {
+  if (!confirm(`"${name}" 항목을 삭제할까요?`)) return;
+  try {
+    const res = await fetch(`/api/records/${id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(await res.text());
+    if (state.selectedId === id) {
+      state.selectedId = null;
+      els.preview.textContent = "왼쪽 목록에서 항목을 선택하면 마크다운 미리보기가 표시됩니다.";
+      els.previewTitle.textContent = "미리보기";
+      els.downloadCurrent.disabled = true;
+      els.copyMd.disabled = true;
+    }
+    await loadHistory();
+    showToast("삭제했습니다.", "success");
+  } catch (err) {
+    showToast(`삭제 실패: ${err.message || err}`, "error");
+  }
+}
+
+async function deleteAllItems() {
+  if (state.items.length === 0) return;
+  if (!confirm(`변환 기록 ${state.items.length}건을 모두 삭제할까요?`)) return;
+  try {
+    const res = await fetch("/api/records", { method: "DELETE" });
+    if (!res.ok) throw new Error(await res.text());
+    state.selectedId = null;
+    els.preview.textContent = "왼쪽 목록에서 항목을 선택하면 마크다운 미리보기가 표시됩니다.";
+    els.previewTitle.textContent = "미리보기";
+    els.downloadCurrent.disabled = true;
+    els.copyMd.disabled = true;
+    await loadHistory();
+    showToast("모두 삭제했습니다.", "success");
+  } catch (err) {
+    showToast(`삭제 실패: ${err.message || err}`, "error");
   }
 }
 
@@ -299,6 +396,7 @@ function wire() {
     if (ids.length === 0) return;
     window.location.href = `/api/download-zip?ids=${encodeURIComponent(ids.join(","))}`;
   });
+  els.deleteAll.addEventListener("click", () => deleteAllItems());
 }
 
 async function init() {

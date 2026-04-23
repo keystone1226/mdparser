@@ -20,6 +20,8 @@ from .converter import convert_file
 from .storage import (
     ConversionRecord,
     cleanup_expired,
+    delete_all_records,
+    delete_record,
     get_record,
     list_records,
     read_markdown,
@@ -189,6 +191,19 @@ async def download_zip(ids: str | None = None):
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@app.delete("/api/records/{record_id}")
+async def delete_one(record_id: str) -> dict:
+    if not delete_record(record_id):
+        raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.")
+    return {"ok": True, "id": record_id}
+
+
+@app.delete("/api/records")
+async def delete_all() -> dict:
+    removed = delete_all_records()
+    return {"ok": True, "deletedCount": removed}
 
 
 @app.get("/", response_class=HTMLResponse)

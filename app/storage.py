@@ -113,6 +113,41 @@ def read_markdown(record: ConversionRecord) -> str:
     return record.markdown_path.read_text(encoding="utf-8")
 
 
+def delete_record(record_id: str) -> bool:
+    with _lock:
+        items = _load_index()
+        remaining: list[dict] = []
+        found = False
+        for item in items:
+            if item.get("id") == record_id:
+                found = True
+                md_path = STORAGE_DIR / f"{record_id}.md"
+                if md_path.exists():
+                    try:
+                        md_path.unlink()
+                    except OSError:
+                        pass
+            else:
+                remaining.append(item)
+        if found:
+            _save_index(remaining)
+        return found
+
+
+def delete_all_records() -> int:
+    with _lock:
+        items = _load_index()
+        for item in items:
+            md_path = STORAGE_DIR / f"{item['id']}.md"
+            if md_path.exists():
+                try:
+                    md_path.unlink()
+                except OSError:
+                    pass
+        _save_index([])
+        return len(items)
+
+
 def cleanup_expired() -> int:
     if settings.retention_hours <= 0:
         return 0
